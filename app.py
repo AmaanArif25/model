@@ -1,69 +1,44 @@
 import streamlit as st
 import joblib
-from tensorflow.keras.models import load_model
 import numpy as np
+from tensorflow.keras.models import load_model
 from sklearn.preprocessing import OneHotEncoder
-import pandas as pd
 
-# Load models
-rf_model = joblib.load('random_forest_model.sav')  # Load Random Forest model
-lstm_model = load_model('lstm_model.h5')  # Load LSTM model
+# Load your trained models
+rf_model = joblib.load('model/random_forest_model.sav')
+lstm_model = load_model('model/lstm_model.h5')
 
-# Load k-mer encoder
-kmer_mapping_df = pd.read_csv("kmer_mapping.csv")
-encoder = OneHotEncoder()
-encoder.fit(kmer_mapping_df["k-mer"].values.reshape(-1, 1))
+# Create a function for k-mer prediction
+def predict_next_kmer(sequence, model):
+    # Generate k-mers from the input sequence (adjust for k)
+    k = 4
+    kmers = [sequence[i:i+k] for i in range(len(sequence) - k + 1)]
+    
+    # One-hot encode the k-mers
+    encoder = OneHotEncoder()
+    X = encoder.fit_transform(np.array(kmers).reshape(-1, 1)).toarray()
+    
+    # Predict the next nucleotide using the model
+    next_nucleotides = model.predict(X)
+    return next_nucleotides
 
-def generate_kmers(sequence, k=4):
-    """
-    Generate non-overlapping k-mers from a genome sequence.
-    """
-    return [sequence[i:i + k] for i in range(0, len(sequence), k) if len(sequence[i:i + k]) == k]
+# Streamlit app UI
+st.title("Genome Scaffold Predictor")
 
-def predict_next_nucleotide_rf(kmer):
-    """
-    Predict the next nucleotide using Random Forest model.
-    """
-    kmer_encoded = encoder.transform([[kmer]]).toarray()
-    prediction = rf_model.predict(kmer_encoded)
-    nucleotide_map = kmer_mapping_df["Next Nucleotide"].astype('category').cat.categories
-    return nucleotide_map[prediction[0]]
+# User input for genome sequence
+user_input = st.text_area("Enter your genome sequence:", height=150)
 
-def predict_next_nucleotide_lstm(kmer):
-    """
-    Predict the next nucleotide using LSTM model.
-    """
-    kmer_encoded = encoder.transform([[kmer]]).toarray()
-    kmer_encoded = np.expand_dims(kmer_encoded, axis=1)  # Reshape for LSTM input
-    prediction = lstm_model.predict(kmer_encoded)
-    nucleotide_map = kmer_mapping_df["Next Nucleotide"].astype('category').cat.categories
-    return nucleotide_map[np.argmax(prediction)]
-
-# Streamlit App
-st.title("Advanced Genome Scaffolding Tool")
-
-# Input Section
-st.header("Input Genome Sequence")
-sequence_input = st.text_area("Enter your genome sequence (A, T, C, G):", "")
-kmer_size = st.number_input("K-mer size:", min_value=2, max_value=10, value=4)
-
-# Validate Input
-if st.button("Validate Sequence"):
-    if set(sequence_input.upper()).issubset({'A', 'T', 'C', 'G'}):
-        st.success("Valid nucleotide sequence!")
+if st.button("Predict Next K-mer"):
+    if user_input:
+        # Ensure valid nucleotide sequence (A, T, C, G)
+        if all(base in "ATCG" for base in user_input):
+            next_kmer_rf = predict_next_kmer(user_input, rf_model)
+            next_kmer_lstm = predict_next_kmer(user_input, lstm_model)
+            
+            # Display predictions
+            st.write(f"Random Forest predicted next k-mer: {next_kmer_rf}")
+            st.write(f"LSTM predicted next k-mer: {next_kmer_lstm}")
+        else:
+            st.error("Invalid sequence. Please only enter nucleotide bases (A, T, C, G).")
     else:
-        st.error("Invalid sequence. Please enter only A, T, C, G.")
-
-# Generate K-mers
-if sequence_input and st.button("Generate K-mers"):
-    kmers = generate_kmers(sequence_input.upper(), k=kmer_size)
-    st.write("Generated K-mers:", kmers)
-
-# Model Predictions
-st.header("Predict Next Nucleotide")
-selected_kmer = st.selectbox("Select a K-mer for prediction:", kmers if sequence_input else [])
-if selected_kmer and st.button("Predict Next Nucleotide"):
-    rf_prediction = predict_next_nucleotide_rf(selected_kmer)
-    lstm_prediction = predict_next_nucleotide_lstm(selected_kmer)
-    st.write(f"Random Forest Prediction: {rf_prediction}")
-    st.write(f"LSTM Prediction: {lstm_prediction}")
+        st.error("Please enter a genome sequence.")
