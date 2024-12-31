@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Dec  31 12:00:00 2024
-
-@author: Amaan Arif
-"""
-
 import streamlit as st
 import joblib
 from tensorflow.keras.models import load_model
